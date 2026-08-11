@@ -40,7 +40,7 @@ const seedInventory = async () => {
 seedInventory();
 
 mongoose.connect(process.env.MONGO_URI)
-    .then(() => console.log('✅ MongoDB Connected Successfully'))
+    .then(() => console.log('✅ MongoDB Connected Successfully running in live URL'))
     .catch(err => console.log('❌ MongoDB Connection Error: ', err));
 
 const PORT = process.env.PORT || 5000;
