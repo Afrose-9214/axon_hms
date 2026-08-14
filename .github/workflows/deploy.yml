@@ -1,30 +1,40 @@
-name: Axon HMS Docker CI/CD Pipeline
+name: Deploy Axon-HMS to Amazon ECS
 
 on:
   push:
     branches: [ "main" ]
 
-jobs:
-  build-and-deploy:
-    runs-on: ubuntu-latest
+# These permissions are mandatory for OIDC authentication
+permissions:
+  id-token: write
+  contents: read
 
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
     steps:
     - name: Checkout Code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
-    - name: Log in to Docker Hub
-      uses: docker/login-action@v2
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
       with:
-        username: ${{ secrets.DOCKER_USERNAME }}
-        password: ${{ secrets.DOCKER_PASSWORD }}
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        aws-region: ap-south-1
 
-    - name: Build and Push Docker Image
-      uses: docker/build-push-action@v4
-      with:
-        context: .
-        push: true
-        tags: ${{ secrets.DOCKER_USERNAME }}/axon-hms-app:latest
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
 
-    - name: Deploy to Render
+    - name: Build, tag, and push image to Amazon ECR
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        ECR_REPOSITORY: axon-hms-repo
+        IMAGE_TAG: latest
       run: |
-        curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK }}
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+    - name: Update ECS Service
+      run: |
+        aws ecs update-service --cluster axon-cluster --service axon-service --force-new-deployment --region ap-south-1
