@@ -8,7 +8,12 @@ const verifyTokenAndRole = require('../middleware/auth');
 // GET all pending prescriptions for the pharmacy screen
 router.get('/pending', verifyTokenAndRole(['CASHIER']), async (req, res) => {
     try {
-        const pending = await Prescription.find({ status: 'PENDING' }).populate('doctorId', 'name');
+        // ADDED .limit(50) TO PREVENT RAM CRASHES
+        const pending = await Prescription.find({ status: 'PENDING' })
+            .populate('doctorId', 'name')
+            .sort({ createdAt: -1 }) // Gets the newest ones first
+            .limit(50); // Hard limit to protect AWS memory
+            
         res.json(pending);
     } catch (error) {
         res.status(500).json({ error: error.message });
