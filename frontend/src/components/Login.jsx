@@ -37,7 +37,7 @@ export default function Login() {
 
     return (
         <div style={{ maxWidth: '400px', margin: '100px auto', fontFamily: 'sans-serif', textAlign: 'center' }}>
-            <h2>Axon HMS Clinc- Live Portal</h2>
+            <h2>Axon HMS Abdul's Clinc- Live Portal</h2>
             {error && <p style={{ color: 'red' }}>{error}</p>}
             
             <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>

@@ -1,0 +1,51 @@
+{
+  "family": "axon-task",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "1024",
+  "memory": "3072",
+  "executionRoleArn": "arn:aws:iam::846911352728:role/ecsTaskExecutionRole",
+  "containerDefinitions": [
+    {
+      "name": "Main",
+      "image": "placeholder",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 5000,
+          "hostPort": 5000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "PORT",
+          "value": "5000"
+        },
+        {
+          "name": "AXON_API_KEY",
+          "value": "your_axon_test_key"
+        },
+        {
+          "name": "JWT_SECRET",
+          "value": "your_super_secret_key_change_this_later"
+        },
+        {
+          "name": "MONGO_URI",
+          "value": "mongodb+srv://hms_admin:ba19U3WtbzBGfJGa@clusteraxonhms.wwwvfqn.mongodb.net/?appName=Clusteraxonhms"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-create-group": "true",
+          "awslogs-group": "/ecs/axon-task",
+          "awslogs-region": "ap-south-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}
