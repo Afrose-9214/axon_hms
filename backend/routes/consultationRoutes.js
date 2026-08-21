@@ -61,7 +61,7 @@ router.patch('/:id', verifyTokenAndRole(['CASHIER', 'ADMIN']), async (req, res) 
 });
 
 // GET: Fetch entire medical history for a specific patient
-router.get('/history/:patientId', verifyTokenAndRole(['DOCTOR', 'ADMIN', 'CASHIER']), async (req, res) => {
+router.get('/history/:patientId', verifyTokenAndRole(['DOCTOR', 'ADMIN', 'CASHIER', 'NURSE', 'RECEPTIONIST']), async (req, res) => {
     try {
         // Find all consultations for this ID and sort by newest first (-1)
         const history = await Consultation.find({ patientId: req.params.patientId }).sort({ createdAt: -1 });

@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const Appointment = require('../models/Appointment');
-const verifyTokenAndRole = require('../middleware/auth'); // Adjust path if needed
+const verifyTokenAndRole = require('../middleware/auth'); 
 
-// Handles POST /api/appointments
-router.post('/', verifyTokenAndRole(['CASHIER']), async (req, res) => {
+// 🌟 UPDATED: Allow NURSE and RECEPTIONIST to book appointments
+router.post('/', verifyTokenAndRole(['NURSE', 'RECEPTIONIST', 'CASHIER']), async (req, res) => {
     try {
         const { patientName, patientId, age, gender, reason, vitals } = req.body;
 
@@ -14,7 +14,7 @@ router.post('/', verifyTokenAndRole(['CASHIER']), async (req, res) => {
             age,
             gender,
             reason,
-            vitals, // Saving the BP, Pulse, SpO2, RBS, Temp
+            vitals, // BP, Pulse, SpO2, RBS, Temp
             status: 'WAITING'
         });
 
@@ -26,8 +26,8 @@ router.post('/', verifyTokenAndRole(['CASHIER']), async (req, res) => {
     }
 });
 
-// GET route for the Doctor Dashboard to fetch the queue
-router.get('/today', verifyTokenAndRole(['DOCTOR', 'CASHIER']), async (req, res) => {
+// 🌟 UPDATED: Allow Nurse to also view the queue if needed
+router.get('/today', verifyTokenAndRole(['DOCTOR', 'NURSE', 'CASHIER', 'RECEPTIONIST']), async (req, res) => {
     try {
         const queue = await Appointment.find({ status: 'WAITING' }).sort({ date: 1 });
         res.json(queue);

@@ -3,282 +3,133 @@ import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-
-// --- PREMIUM UI/UX THEME PALETTES ---
-const LIGHT_COLORS = { 
-    bg: '#F3F4F6',          // Soft clinical gray
-    sidebar: '#FFFFFF',     // Crisp white
-    primary: '#2563EB',     // Trustworthy Royal Blue
-    secondary: '#0D9488',   // Medical Teal
-    border: '#E5E7EB',      // Soft divider
-    text: '#111827',        // Deep ink (easier to read than pure black)
-    muted: '#6B7280',       // Accessible gray
-    danger: '#EF4444',      // Alert Red
-    success: '#10B981',     // Emerald Green
-    shadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)' // Floating effect
-};
-
-const DARK_COLORS = { 
-    bg: '#0F172A',          // Deep Slate
-    sidebar: '#1E293B',     // Charcoal
-    primary: '#3B82F6',     // Vibrant Blue for contrast
-    secondary: '#2DD4BF',   // Bright Teal
-    border: '#334155',      // Subtle dark divider
-    text: '#F8FAFC',        // Crisp off-white
-    muted: '#94A3B8',       // Soft slate
-    danger: '#F87171',      // Softened Red
-    success: '#34D399',     // Softened Green
-    shadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)' // Deep shadow
-};
+import toast, { Toaster } from 'react-hot-toast';
+import { Receipt, Package, LogOut, CheckCircle, X, CreditCard, Banknote, Smartphone, SplitSquareHorizontal } from 'lucide-react';
 
 export default function PharmacyDashboard() {
     const { user, logout } = useContext(AuthContext);
+    
+    const [view, setView] = useState('billing'); 
 
-    // --- THEME STATE ---
-    const [isDarkMode, setIsDarkMode] = useState(false); // Defaulting to Light Mode for a clean look
-    const COLORS = isDarkMode ? DARK_COLORS : LIGHT_COLORS;
-    const S = getStyles(COLORS); // <--- Add this single line here
-
-    // --- NAVIGATION STATES ---
-    const [view, setView] = useState('scheduling'); 
-    const [mode, setMode] = useState('search'); 
-
-    // --- DATA STATES ---
+    // DATA STATES
     const [pendingBills, setPendingBills] = useState([]);
     const [inventory, setInventory] = useState([]);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [searchResults, setSearchResults] = useState([]);
-    const [patientRecord, setPatientRecord] = useState(null);
-    const [reason, setReason] = useState('');
     
-    const [vitals, setVitals] = useState({ bp: '', pulse: '', spo2: '', rbs: '', temp: '', weight: '' });
-    const [regData, setRegData] = useState({ patientName: '', age: '', gender: 'Male', mobile: '', address: '', email: '' });
-    
-    const [isBooking, setIsBooking] = useState(false);
-    // Payment Modal States
+    // INVENTORY FORM STATE
+    const [formData, setFormData] = useState({
+        itemName: '', batchNumber: '', expiryDate: '', hsnCode: '', 
+        gstPercent: 12, mrpPerUnit: '', salePricePerUnit: '', stockQuantity: ''
+    });
+
+    // POS CHECKOUT STATES
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [selectedBill, setSelectedBill] = useState(null);
-    const [paymentMethod, setPaymentMethod] = useState('Cash'); // 'CASH', 'UPI', 'CARD', 'SPLIT'
+    const [paymentMethod, setPaymentMethod] = useState('Cash'); 
     const [splitDetails, setSplitDetails] = useState({ cash: '', online: '' });
     const [customConsultFee, setCustomConsultFee] = useState(0);
     const [tenderAmount, setTenderAmount] = useState('');
 
-    // --- POS PAYMENT STATES ---
-    const [paymentModalOpen, setPaymentModalOpen] = useState(false);
-    const [activeBill, setActiveBill] = useState(null);
-    const [amountTendered, setAmountTendered] = useState('');
-    const [splitPayments, setSplitPayments] = useState({ CASH: '', UPI: '', CARD: '' });
-
     useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const headers = { Authorization: `Bearer ${user.token}` };
-                if (view === 'billing') {
-                    const res = await axios.get('/api/consultations/pending', { headers });
-                    setPendingBills(res.data);
-                } else if (view === 'inventory') {
-                    const res = await axios.get('/api/inventory', { headers });
-                    setInventory(res.data);
-                }
-            } catch (err) { console.error("Fetch error", err); }
-        };
         fetchData();
+        const interval = setInterval(() => {
+            if(view === 'billing') fetchData();
+        }, 10000);
+        return () => clearInterval(interval);
     }, [view, user.token]);
 
-    const handleLookup = async () => {
+    const fetchData = async () => {
         try {
-        const res = await axios.get(`/api/patients/search?q=${searchQuery}`, {
-            headers: { Authorization: `Bearer ${user.token}` }
-        });
-        
-        if (res.data.length === 0) {
-            alert("No patient found with that Name, ID, or Phone.");
-            setSearchResults([]);
-        } else if (res.data.length === 1) {
-            // If only one exact match, auto-select them
-            setPatientRecord(res.data[0]);
-            setSearchResults([]);
-        } else {
-            // If multiple matches (like searching "John"), show the list
-            setSearchResults(res.data);
-            setPatientRecord(null);
-        }
-    } catch (err) { 
-        alert("Search failed."); 
-    }
+            const headers = { Authorization: `Bearer ${user.token}` };
+            if (view === 'billing') {
+                const res = await axios.get('/api/consultations/pending', { headers });
+                setPendingBills(res.data);
+            } else if (view === 'inventory') {
+                const res = await axios.get('/api/inventory', { headers });
+                setInventory(res.data);
+            }
+        } catch (err) { console.error("Fetch error", err); }
     };
 
-   // --- PAYMENT PROCESSING FUNCTION ---
-   // 1. Opens the POS Modal and sets the active bill
+    // --- INVENTORY FUNCTIONS ---
+    const handleInventoryChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+
+    const handleAddItem = async (e) => {
+        e.preventDefault();
+        try {
+            await axios.post('/api/inventory/add', formData, {
+                headers: { Authorization: `Bearer ${user.token}` }
+            });
+            toast.success("Medicine added to inventory!");
+            setFormData({ itemName: '', batchNumber: '', expiryDate: '', hsnCode: '', gstPercent: 12, mrpPerUnit: '', salePricePerUnit: '', stockQuantity: '' });
+            fetchData();
+        } catch (error) {
+            toast.error("Failed to add inventory item.");
+        }
+    };
+
+    // --- POS CHECKOUT FUNCTIONS ---
     const openPaymentModal = (bill) => {
         setSelectedBill(bill);
         setPaymentMethod('Cash');
         setTenderAmount('');
         setSplitDetails({ cash: '', online: '' });
         setCustomConsultFee(bill.consultationFee || 500); 
-        setShowPaymentModal(true); // This tells React to show the modal!
-    };
-
-    // 2. Submits the finalized payment (BULLETPROOF VERSION)
-    
-
-    const handleRegister = async (e) => {
-        e.preventDefault();
-        try {
-            const res = await axios.post('/api/patients/register', regData, {
-                headers: { Authorization: `Bearer ${user.token}` }
-            });
-            alert(`Success! ID: ${res.data.patientId}`);
-            setPatientId(res.data.patientId);
-            setPatientRecord(res.data);
-            setMode('search');
-        } catch (err) { alert("Registration failed."); }
-    };
-
-    const handleBook = async () => {
-        if (isBooking) return; // Completely prevents double-clicks
-        setIsBooking(true);
-
-        try {
-            // CRITICAL FIX: Strip out the internal MongoDB '_id' so the 
-            // Appointments database can generate its own fresh, unique ID.
-            const { _id, createdAt, updatedAt, __v, ...cleanPatientRecord } = patientRecord;
-
-            const payload = { 
-                ...cleanPatientRecord, 
-                reason, 
-                vitals: { ...vitals }, 
-                status: 'WAITING' 
-            };
-
-           await axios.post('/api/appointments', payload, {
-            headers: { Authorization: `Bearer ${user.token}` }
-        });
-        
-        alert("Booking Success! Sent to Doctor.");
-        
-        // Reset the UI
-        setPatientRecord(null); 
-        setSearchQuery(''); // <--- Fixed line
-        setReason('');
-        setVitals({ bp: '', pulse: '', spo2: '', rbs: '', temp: '', weight: '' });
-
-    } catch (err) { 
-        // 🚨 NEW: This will catch the EXACT error from your backend!
-        const errorMessage = err.response?.data?.message || err.response?.data?.error || err.message;
-        console.error("Full Backend Error Details:", err.response || err);
-        
-        alert(`❌ Backend Rejected Booking:\n\n${errorMessage}\n\nPlease check your VS Code Backend Terminal for more details.`); 
-    } finally {
-        setIsBooking(false); 
-    }
-    };
-
-    const triggerPaymentModal = (bill) => {
-        setSelectedBill(bill);
         setShowPaymentModal(true);
-        setPaymentMethod('Cash'); 
-        setSplitDetails({ cash: '', online: '' }); 
-        setTenderAmount(''); 
-        setCustomConsultFee(bill.consultationFee || 500);
     };
 
-    const processFinalPayment = async () => {
-        // 1. Safety Check
-        if (!selectedBill) return alert("No bill selected.");
-
-        const medTotal = selectedBill.medicines ? selectedBill.medicines.reduce((acc, m) => acc + (m.price || 0) * (m.qty || 1), 0) : 0;
-        const consultFee = Number(customConsultFee);
-        const grandTotal = consultFee + medTotal;
-
-        // 2. The Try Block
-        try {
-            const finalMethod = paymentMethod === 'Split' 
-                ? `Split (Cash: ${splitDetails.cash}, Online: ${splitDetails.online})` 
-                : paymentMethod;
-
-            // Update Database
-            await axios.patch(`/api/consultations/${selectedBill._id}`, { 
-                status: 'PAID',
-                paymentMethod: finalMethod,
-                consultationFee: consultFee 
-            }, {
-                headers: { Authorization: `Bearer ${user.token}` }
+    const generateInvoicePDF = (bill, consultFee, grandTotal) => {
+        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a5' });
+        doc.setFont("helvetica", "bold"); doc.setFontSize(16);
+        doc.text("AXON MEDICAL CENTER - RECEIPT", 74, 15, { align: "center" });
+        doc.setFontSize(10); doc.setFont("helvetica", "normal");
+        doc.text(`Patient: ${bill.patientName} (${bill.patientId})`, 10, 30);
+        doc.text(`Date: ${new Date().toLocaleDateString()}`, 10, 36);
+        
+        let currentY = 45;
+        if (bill.medicines && bill.medicines.length > 0) {
+            autoTable(doc, {
+                startY: currentY,
+                head: [['Medicine', 'Qty', 'Price', 'Total']],
+                body: bill.medicines.map(m => [m.name, m.qty, `Rs.${m.price}`, `Rs.${(m.price * m.qty)}`]),
+                theme: 'grid', styles: { fontSize: 9 }
             });
+            currentY = doc.lastAutoTable.finalY + 10;
+        }
 
-            // 3. GENERATE PDF (Wait for DB success)
-            generateInvoicePDF(selectedBill, consultFee, grandTotal);
+        doc.setFont("helvetica", "bold");
+        doc.text(`Consultation Fee: Rs.${consultFee}`, 10, currentY);
+        doc.text(`Grand Total: Rs.${grandTotal}`, 10, currentY + 8);
+        doc.text(`Payment Method: ${paymentMethod.toUpperCase()}`, 10, currentY + 16);
+        doc.save(`Invoice_${bill.patientId}.pdf`);
+    };
 
-            // 4. Update UI
+    const submitPayment = async () => {
+        if (!selectedBill) return toast.error("Bill is missing.");
+        try {
+            toast.loading("Processing payment...");
+            await axios.patch(`/api/consultations/${selectedBill._id}`, { 
+                status: 'PAID', 
+                paymentMethod: paymentMethod.toUpperCase(),
+                consultationFee: customConsultFee, 
+                paymentDetails: paymentMethod === 'Split' ? splitDetails : { amount: activeTotal }
+            }, { headers: { Authorization: `Bearer ${user.token}` } });
+
+            generateInvoicePDF(selectedBill, customConsultFee, activeTotal);
+            
+            toast.dismiss();
+            toast.success("Payment successful! Inventory updated & PDF Generated.");
+            
             setPendingBills(prev => prev.filter(b => b._id !== selectedBill._id));
             setShowPaymentModal(false);
-            alert("✅ Payment Success & Receipt Generated!");
-
-        } catch (err) {
-            // 🚨 THIS WAS MISSING: The Catch Clause
-            console.error("Payment Error:", err);
-            alert("❌ Payment Failed. Check console for details.");
-        } 
-    }; // <--- This closes the function
-
-    const modalMedTotal = selectedBill && selectedBill.medicines ? selectedBill.medicines.reduce((acc, m) => acc + (m.price || 0) * (m.qty || 1), 0) : 0;
-    const modalGrandTotal = Number(customConsultFee) + modalMedTotal;
-
-    // --- DYNAMIC PREMIUM STYLES ---
-    const sidebarBtn = (active) => ({ 
-        background: active ? `${COLORS.primary}20` : 'transparent', // 20% opacity of primary color
-        color: active ? COLORS.primary : COLORS.text, 
-        border: 'none', padding: '16px 20px', textAlign: 'left', 
-        cursor: 'pointer', borderRadius: '12px', width: '100%', 
-        fontWeight: active ? 'bold' : '500', transition: 'all 0.2s ease' 
-    });
-    const cardStyle = { backgroundColor: COLORS.sidebar, padding: '30px', borderRadius: '20px', border: `1px solid ${COLORS.border}`, color: COLORS.text, boxShadow: COLORS.shadow, transition: 'all 0.3s ease' };
-    const inputStyle = { width: '100%', padding: '14px', borderRadius: '10px', backgroundColor: COLORS.bg, color: COLORS.text, border: `1px solid ${COLORS.border}`, marginBottom: '12px', boxSizing: 'border-box', outline: 'none', transition: 'border 0.2s ease', fontSize: '14px' };
-    const primaryBtn = { background: COLORS.primary, color: '#FFFFFF', border: 'none', padding: '12px 24px', borderRadius: '10px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.3)' };
-    const bookBtn = { width: '100%', padding: '14px', background: COLORS.success, color: '#FFFFFF', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px', boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.3)' };
-    const payBtn = { width: '100%', padding: '14px', background: COLORS.secondary, color: '#FFFFFF', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(13, 148, 136, 0.3)' };
-    const activeTab = { padding: '12px 30px', background: COLORS.primary, color: '#FFFFFF', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.3)' };
-    const inactiveTab = { padding: '12px 30px', background: 'transparent', color: COLORS.muted, border: `1px solid ${COLORS.border}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500' };
-    const confirmBox = { marginTop: '25px', padding: '20px', background: COLORS.bg, borderRadius: '15px', border: `1px solid ${COLORS.border}` };
-    const logoutBtnStyle = { marginTop: '15px', background: `${COLORS.danger}15`, color: COLORS.danger, border: 'none', padding: '14px', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s' };
-    const miniLabel = { fontSize: '11px', fontWeight: '700', color: COLORS.secondary, marginTop: '20px', marginBottom: '8px', display: 'block', textTransform: 'uppercase', letterSpacing: '0.8px' };
-    const tinyLabel = { fontSize: '10px', color: COLORS.muted, textTransform: 'uppercase', display: 'block', marginBottom: '4px', fontWeight: '600' };
-    
-    const modalOverlay = { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 };
-    const modalContent = { backgroundColor: COLORS.sidebar, color: COLORS.text, padding: '30px', borderRadius: '24px', width: '420px', border: `1px solid ${COLORS.border}`, boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' };
-    const methodActive = { padding: '14px', background: COLORS.primary, color: '#FFFFFF', border: `2px solid ${COLORS.primary}`, borderRadius: '10px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)' };
-    const methodInactive = { padding: '14px', background: 'transparent', color: COLORS.muted, border: `2px solid ${COLORS.border}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '600' };
-    const themeBtnStyle = { marginTop: 'auto', background: COLORS.bg, color: COLORS.text, border: `1px solid ${COLORS.border}`, padding: '12px', borderRadius: '12px', cursor: 'pointer', fontWeight: '600', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' };
-
-    // --- CLEAN SUBMIT FUNCTION ---
-    const submitPayment = async () => {
-        if (!selectedBill) return alert("Critical Error: Bill is missing.");
-
-        try {
-            await axios.patch(`/api/consultations/${selectedBill._id}`, 
-                { 
-                    status: 'PAID', 
-                    paymentMethod: paymentMethod.toUpperCase(),
-                    consultationFee: customConsultFee, 
-                    paymentDetails: paymentMethod === 'Split' ? splitDetails : { amount: activeTotal }
-                }, 
-                { headers: { Authorization: `Bearer ${user.token}` } }
-            );
-
-            alert("✅ Payment successful! Inventory updated.");
-            
-            setPendingBills(prevBills => prevBills.filter(bill => bill._id !== selectedBill._id));
-            setShowPaymentModal(false);
             setSelectedBill(null); 
-
         } catch (err) {
-            const errorMsg = err.response?.data?.message || err.message;
-            alert(`❌ Payment failed: \n\n${errorMsg}`);
+            toast.dismiss();
+            toast.error(err.response?.data?.message || "Payment failed");
         }
     };
 
-    // --- POS MATH ENGINE ---
-    const activeMedsTotal = selectedBill?.medicines ? selectedBill.medicines.reduce((sum, m) => sum + (m.price * m.qty), 0) : 0;
+    // POS Math Setup
+    const activeMedsTotal = selectedBill?.medicines ? selectedBill.medicines.reduce((sum, m) => sum + ((m.price || 0) * (m.qty || 1)), 0) : 0;
     const activeTotal = parseFloat(customConsultFee || 0) + activeMedsTotal;
 
     let totalTendered = 0;
@@ -289,432 +140,275 @@ export default function PharmacyDashboard() {
     const isInsufficient = totalTendered < activeTotal;
     const changeDue = totalTendered > activeTotal ? totalTendered - activeTotal : 0;
     const remainingBalance = activeTotal - totalTendered;
-    // -----------------------
 
-    
     return (
-        <div style={{ display: 'flex', height: '100vh', width: '100vw', backgroundColor: COLORS.bg, color: COLORS.text, overflow: 'hidden', transition: 'background-color 0.3s ease' }}>
-            
-            <aside style={{ width: '280px', backgroundColor: COLORS.sidebar, padding: '30px 20px', display: 'flex', flexDirection: 'column', borderRight: `1px solid ${COLORS.border}`, transition: 'background-color 0.3s ease' }}>
-                <h2 style={{ color: COLORS.primary, textAlign: 'center', marginBottom: '40px', letterSpacing: '1px', fontWeight: '800' }}>AXON HMS</h2>
-                <nav style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    <button onClick={() => setView('scheduling')} style={sidebarBtn(view === 'scheduling')}>📅 Appointments</button>
-                    <button onClick={() => setView('billing')} style={sidebarBtn(view === 'billing')}>💳 Patient Billing</button>
-                    <button onClick={() => setView('inventory')} style={sidebarBtn(view === 'inventory')}>📦 Inventory</button>
+        <div className="flex flex-col md:flex-row h-screen w-full bg-slate-50 overflow-hidden text-slate-900">
+            <Toaster position="top-center" />
+
+            <header className="md:hidden flex items-center justify-between p-4 bg-white border-b z-20 shadow-sm">
+                <div className="font-black text-emerald-600 tracking-wide text-lg">AXON PHARMACY</div>
+                <button onClick={logout} className="text-red-500"><LogOut size={20} /></button>
+            </header>
+
+            <aside className="hidden md:flex w-[260px] bg-white flex-col p-6 border-r z-20 shadow-sm">
+                <div className="mb-10 font-black text-center text-emerald-600 tracking-wider text-xl">AXON PHARMACY</div>
+                <nav className="flex-1 flex flex-col gap-3">
+                    <button onClick={() => setView('billing')} className={`flex items-center gap-3 p-4 rounded-xl font-bold transition-all ${view === 'billing' ? 'bg-emerald-50 text-emerald-600 shadow-sm' : 'text-slate-500 hover:bg-slate-100'}`}>
+                        <Receipt size={20} /> Pending Bills
+                    </button>
+                    <button onClick={() => setView('inventory')} className={`flex items-center gap-3 p-4 rounded-xl font-bold transition-all ${view === 'inventory' ? 'bg-emerald-50 text-emerald-600 shadow-sm' : 'text-slate-500 hover:bg-slate-100'}`}>
+                        <Package size={20} /> Inventory
+                    </button>
                 </nav>
-                
-                <button onClick={() => setIsDarkMode(!isDarkMode)} style={themeBtnStyle}>
-                    {isDarkMode ? '☀️ Light Mode' : '🌙 Dark Mode'}
+                <button onClick={logout} className="mt-auto p-4 bg-red-50 text-red-600 font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-red-100 transition-colors">
+                    <LogOut size={18}/> Sign Out
                 </button>
-                
-                <button onClick={logout} style={logoutBtnStyle}>Sign Out</button>
             </aside>
 
-            <main style={{ flex: 1, padding: '50px', overflowY: 'auto', position: 'relative' }}>
+            <main className="flex-1 overflow-y-auto p-4 md:p-8 pb-24 md:pb-8">
                 
-                {/* APPOINTMENT MODULE */}
-                {view === 'scheduling' && (
-                    <div style={{ maxWidth: '750px', margin: '0 auto' }}>
-                        <div style={{ display: 'flex', gap: '15px', marginBottom: '30px', justifyContent: 'center' }}>
-                            <button onClick={() => setMode('search')} style={mode === 'search' ? activeTab : inactiveTab}>🔍 Search Patient</button>
-                            <button onClick={() => setMode('register')} style={mode === 'register' ? activeTab : inactiveTab}>➕ New Registration</button>
-                        </div>
-                        <div style={cardStyle}>
-                            {mode === 'search' ? (
-                                <>
-                                    <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
-                                        <input 
-                                            placeholder="Search by Name, Phone, or AX ID..." 
-                                            style={{ ...inputStyle, marginBottom: 0 }} 
-                                            value={searchQuery} 
-                                            onChange={e => setSearchQuery(e.target.value)} 
-                                            onKeyDown={e => e.key === 'Enter' && handleLookup()} // Lets them press Enter to search
-                                        />
-                                        <button onClick={handleLookup} style={primaryBtn}>🔍 Search</button>
-                                    </div>
-
-                                    {/* NEW: Display Multiple Search Results to pick from */}
-                                    {searchResults.length > 0 && (
-                                        <div style={{ background: COLORS.bg, borderRadius: '10px', padding: '10px', marginBottom: '20px', border: `1px solid ${COLORS.border}` }}>
-                                            <p style={{ margin: '0 0 10px 0', fontSize: '12px', color: COLORS.muted }}>Multiple patients found. Please select one:</p>
-                                            {searchResults.map(p => (
-                                                <div 
-                                                    key={p._id} 
-                                                    onClick={() => { setPatientRecord(p); setSearchResults([]); }}
-                                                    style={{ padding: '12px', borderBottom: `1px solid ${COLORS.border}`, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                                                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = `${COLORS.primary}20`}
-                                                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                                >
-                                                    <div>
-                                                        <span style={{ fontWeight: 'bold', color: COLORS.text }}>{p.patientName}</span>
-                                                        <span style={{ color: COLORS.muted, fontSize: '12px', marginLeft: '10px' }}>{p.age} Yrs / {p.gender}</span>
-                                                    </div>
-                                                    <div style={{ textAlign: 'right' }}>
-                                                        <div style={{ color: COLORS.secondary, fontWeight: 'bold', fontSize: '13px' }}>{p.patientId}</div>
-                                                        <div style={{ color: COLORS.muted, fontSize: '12px' }}>📞 {p.mobile}</div>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                    {patientRecord && (
-                                        <div style={confirmBox}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                <div>
-                                                    <h3 style={{ color: COLORS.text, margin: 0, fontSize: '20px' }}>{patientRecord.patientName}</h3>
-                                                    <p style={{ fontSize: '13px', color: COLORS.secondary, fontWeight: 'bold', margin: '4px 0 0 0' }}>{patientRecord.patientId}</p>
-                                                </div>
-                                            </div>
-                                            <label style={miniLabel}>Reason for Visit</label>
-                                            <textarea placeholder="Describe symptoms..." style={{ ...inputStyle, minHeight: '80px' }} value={reason} onChange={e => setReason(e.target.value)} />
-                                            <label style={miniLabel}>Clinical Vitals</label>
-                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
-                                                <div><span style={tinyLabel}>Blood Pressure</span><input placeholder="120/80" style={inputStyle} onChange={e => setVitals({...vitals, bp: e.target.value})} /></div>
-                                                <div><span style={tinyLabel}>Pulse Rate</span><input placeholder="bpm" style={inputStyle} onChange={e => setVitals({...vitals, pulse: e.target.value})} /></div>
-                                                <div><span style={tinyLabel}>SpO2</span><input placeholder="%" style={inputStyle} onChange={e => setVitals({...vitals, spo2: e.target.value})} /></div>
-                                                <div><span style={tinyLabel}>Temperature</span><input placeholder="°F" style={inputStyle} onChange={e => setVitals({...vitals, temp: e.target.value})} /></div>
-                                                <div><span style={tinyLabel}>RBS</span><input placeholder="mg/dL" style={inputStyle} onChange={e => setVitals({...vitals, rbs: e.target.value})} /></div>
-                                                <div><span style={tinyLabel}>Weight</span><input placeholder="kg" style={inputStyle} onChange={e => setVitals({...vitals, weight: e.target.value})} /></div>
-                                            </div>
-                                            <button onClick={handleBook} disabled={isBooking} style={{ ...bookBtn, marginTop: '25px', opacity: isBooking ? 0.5 : 1 }} >
-                                                {isBooking ? 'Processing...' : 'Confirm Booking ➔'}
-                                            </button>
-                                        </div>
-                                    )}
-                                </>
-                            ) : (
-                                <form onSubmit={handleRegister} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                    <h3 style={{ color: COLORS.text, marginBottom: '15px' }}>Patient Registration</h3>
-                                    <input placeholder="Full Legal Name" style={inputStyle} onChange={e => setRegData({...regData, patientName: e.target.value})} required />
-                                    <div style={{ display: 'flex', gap: '12px' }}>
-                                        <input placeholder="Age" type="number" style={inputStyle} onChange={e => setRegData({...regData, age: e.target.value})} required />
-                                        <select style={inputStyle} onChange={e => setRegData({...regData, gender: e.target.value})}>
-                                            <option value="Male">Male</option>
-                                            <option value="Female">Female</option>
-                                        </select>
-                                    </div>
-                                    <div style={{ display: 'flex', gap: '12px' }}>
-                                        <input placeholder="Mobile Number" style={inputStyle} onChange={e => setRegData({...regData, mobile: e.target.value})} required />
-                                        <input placeholder="Email Address" style={inputStyle} onChange={e => setRegData({...regData, email: e.target.value})} />
-                                    </div>
-                                    <textarea placeholder="Complete Residential Address" style={{ ...inputStyle, minHeight: '80px' }} onChange={e => setRegData({...regData, address: e.target.value})} />
-                                    <button type="submit" style={{ ...bookBtn, marginTop: '15px' }}>Register & Generate ID</button>
-                                </form>
-                            )}
-                        </div>
-                    </div>
-                )}
-
                 {/* BILLING MODULE */}
                 {view === 'billing' && (
-                    <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
-                        <h2 style={{ marginBottom: '25px', fontSize: '24px', color: COLORS.text }}>Pending Payments</h2>
+                    <div className="max-w-6xl mx-auto w-full">
+                        <h2 className="text-2xl font-bold mb-6 text-slate-800">Pending Payments</h2>
                         
-                        <div style={S.cardStyle}>
-                            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                                <thead>
-                                    <tr style={{ color: COLORS.muted, borderBottom: `2px solid ${COLORS.border}`, textTransform: 'uppercase', fontSize: '12px', letterSpacing: '1px' }}>
-                                        <th style={S.tdStyle}>Date / Time</th>
-                                        <th style={S.tdStyle}>Patient Details</th>
-                                        <th style={S.tdStyle}>Bill Breakdown</th>
-                                        <th style={S.tdStyle}>Total Amount</th>
-                                        <th style={S.tdStyle}>Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {pendingBills.length > 0 ? pendingBills.map((bill) => {
-                                        // Calculate the total medicine cost
-                                        const medsTotal = bill.medicines ? bill.medicines.reduce((sum, m) => sum + (m.price * m.qty), 0) : 0;
-                                        const grandTotal = (bill.consultationFee || 500) + medsTotal;
+                        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                            <div className="overflow-x-auto w-full">
+                                <table className="w-full min-w-[800px] text-left">
+                                    <thead className="bg-slate-50 border-b border-slate-200">
+                                        <tr className="text-slate-500 text-xs uppercase tracking-wider">
+                                            <th className="p-5 font-semibold">Date / Time</th>
+                                            <th className="p-5 font-semibold">Patient Details</th>
+                                            <th className="p-5 font-semibold">Bill Breakdown</th>
+                                            <th className="p-5 font-semibold">Total Amount</th>
+                                            <th className="p-5 font-semibold">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {pendingBills.length > 0 ? pendingBills.map((bill) => {
+                                            const medsTotal = bill.medicines ? bill.medicines.reduce((sum, m) => sum + ((m.price||0) * (m.qty||1)), 0) : 0;
+                                            const grandTotal = (bill.consultationFee || 500) + medsTotal;
 
-                                        return (
-                                            <tr key={bill._id} style={{ borderBottom: `1px solid ${COLORS.border}`, transition: 'background-color 0.2s' }} onMouseOver={(e) => e.currentTarget.style.backgroundColor = `${COLORS.primary}08`} onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
-                                                
-                                                {/* 1. Date & Time */}
-                                                <td style={S.tdStyle}>
-                                                    <div style={{ fontWeight: '600', color: COLORS.text }}>{new Date(bill.createdAt).toLocaleDateString()}</div>
-                                                    <div style={{ fontSize: '12px', color: COLORS.muted }}>{new Date(bill.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
-                                                </td>
-
-                                                {/* 2. Patient Details */}
-                                                <td style={S.tdStyle}>
-                                                    <div style={{ fontWeight: 'bold', fontSize: '15px', color: COLORS.primary }}>{bill.patientName}</div>
-                                                    <div style={{ fontSize: '13px', color: COLORS.muted }}>{bill.patientId}</div>
-                                                </td>
-
-                                                {/* 3. Bill Breakdown */}
-                                                <td style={S.tdStyle}>
-                                                    <div style={{ fontSize: '13px', color: COLORS.text }}>Consultation: ₹{bill.consultationFee || 500}</div>
-                                                    <div style={{ fontSize: '13px', color: COLORS.text }}>Pharmacy: ₹{medsTotal}</div>
-                                                </td>
-
-                                                {/* 4. Grand Total */}
-                                                <td style={S.tdStyle}>
-                                                    <div style={{ fontWeight: '900', fontSize: '18px', color: COLORS.text }}>₹{grandTotal}</div>
-                                                    <span style={{ display: 'inline-block', marginTop: '4px', padding: '3px 8px', borderRadius: '10px', background: `${COLORS.danger}20`, color: COLORS.danger, fontSize: '11px', fontWeight: 'bold' }}>
-                                                        UNPAID
-                                                    </span>
-                                                </td>
-
-                                                {/* 5. Action Column */}
-                                                <td style={S.tdStyle}>
-                                                    <button 
-                                                        onClick={() => openPaymentModal(bill)} // Replace with your actual payment function
-                                                        style={{
-                                                            background: COLORS.success,
-                                                            color: '#FFF',
-                                                            border: 'none',
-                                                            padding: '10px 18px',
-                                                            borderRadius: '8px',
-                                                            fontWeight: 'bold',
-                                                            cursor: 'pointer',
-                                                            boxShadow: `0 4px 6px -1px ${COLORS.success}40`,
-                                                            transition: 'transform 0.1s'
-                                                        }}
-                                                        onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.95)'}
-                                                        onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                                                    >
-                                                        💳 Collect Payment
-                                                    </button>
+                                            return (
+                                                <tr key={bill._id} className="hover:bg-slate-50 transition-colors">
+                                                    <td className="p-5">
+                                                        <div className="font-bold text-slate-700">{new Date(bill.createdAt).toLocaleDateString()}</div>
+                                                        <div className="text-xs text-slate-400">{new Date(bill.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                                                    </td>
+                                                    <td className="p-5">
+                                                        <div className="font-bold text-emerald-600 text-base">{bill.patientName}</div>
+                                                        <div className="text-xs text-slate-500 font-medium">{bill.patientId}</div>
+                                                    </td>
+                                                    <td className="p-5">
+                                                        <div className="text-sm text-slate-600">Consultation: ₹{bill.consultationFee || 500}</div>
+                                                        <div className="text-sm text-slate-600">Pharmacy: ₹{medsTotal}</div>
+                                                    </td>
+                                                    <td className="p-5">
+                                                        <div className="font-black text-xl text-slate-800">₹{grandTotal}</div>
+                                                        <span className="inline-block mt-1 px-2 py-1 bg-red-100 text-red-600 text-[10px] font-bold rounded-md tracking-wider">UNPAID</span>
+                                                    </td>
+                                                    <td className="p-5">
+                                                        <button onClick={() => openPaymentModal(bill)} className="bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-2.5 rounded-lg font-bold shadow-sm shadow-emerald-200 transition-transform active:scale-95 whitespace-nowrap">
+                                                            💳 Collect Payment
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        }) : (
+                                            <tr>
+                                                <td colSpan="5" className="p-16 text-center text-slate-400">
+                                                    <CheckCircle size={48} className="mx-auto mb-4 opacity-20" />
+                                                    <div className="text-lg font-semibold">Queue is clear!</div>
+                                                    <p className="text-sm">No pending bills to collect.</p>
                                                 </td>
                                             </tr>
-                                        );
-                                    }) : (
-                                        <tr>
-                                            <td colSpan="5" style={{ padding: '40px', textAlign: 'center', color: COLORS.muted }}>
-                                                <div style={{ fontSize: '24px', marginBottom: '10px' }}>🎉</div>
-                                                No pending bills to collect.
-                                            </td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 )}
 
                 {/* INVENTORY MODULE */}
                 {view === 'inventory' && (
-                    <div style={cardStyle}>
-                        <h3 style={{ marginBottom: '25px', color: COLORS.text, fontSize: '22px' }}>Medicine Stock</h3>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '15px' }}>
-                            {inventory.map(item => (
-                                <div key={item._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', background: COLORS.bg, borderRadius: '12px', border: `1px solid ${COLORS.border}` }}>
-                                    <div>
-                                        <span style={{ fontWeight: '700', fontSize: '15px' }}>{item.itemName}</span><br/>
-                                        <small style={{ color: COLORS.muted }}>Batch: {item.batchNumber} | Exp: {item.expiryDate}</small>
-                                    </div>
-                                    <div style={{ textAlign: 'right' }}>
-                                        <div style={{ color: item.stockQuantity < 10 ? COLORS.danger : COLORS.success, fontWeight: 'bold', fontSize: '13px' }}>
-                                            {item.stockQuantity} in stock
-                                        </div>
-                                        <div style={{ fontWeight: '800', color: COLORS.text }}>₹{item.salePricePerUnit}</div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {/* --- PAYMENT MODAL OVERLAY --- */}
-                {showPaymentModal && selectedBill && (
-                    <div style={modalOverlay}>
-                        <div style={modalContent}>
-                            <h2 style={{ margin: '0 0 5px 0', fontSize: '22px' }}>Finalize Payment</h2>
-                            <p style={{ color: COLORS.secondary, fontWeight: 'bold', margin: '0 0 25px 0' }}>{selectedBill.patientName}</p>
+                    <div className="max-w-6xl mx-auto w-full space-y-8">
+                        
+                        <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-200">
+                            <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2"><Package className="text-emerald-500"/> Add New Medicine Arrival</h3>
                             
-                            <div style={{ background: COLORS.bg, padding: '20px', borderRadius: '12px', marginBottom: '25px', border: `1px solid ${COLORS.border}` }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                                    <span style={{ fontWeight: '500' }}>Consultation Fee:</span>
-                                    <div style={{ display: 'flex', alignItems: 'center' }}>
-                                        <span style={{ marginRight: '8px', fontWeight: 'bold' }}>₹</span>
-                                        <input 
-                                            type="number" 
-                                            value={customConsultFee} 
-                                            onChange={(e) => setCustomConsultFee(e.target.value)} 
-                                            style={{ ...inputStyle, width: '90px', marginBottom: 0, padding: '8px 12px', textAlign: 'right', fontWeight: 'bold' }} 
-                                        />
-                                    </div>
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px', color: COLORS.muted }}>
-                                    <span style={{ fontWeight: '500' }}>Pharmacy Charges:</span>
-                                    <span style={{ fontWeight: 'bold' }}>₹{modalMedTotal}</span>
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', borderTop: `2px dashed ${COLORS.border}`, paddingTop: '15px' }}>
-                                    <span style={{ fontSize: '16px' }}>GRAND TOTAL:</span>
-                                    <span style={{ color: COLORS.primary, fontSize: '22px', fontWeight: '900' }}>₹{modalGrandTotal}</span>
-                                </div>
+                            <form onSubmit={handleAddItem} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                <input type="text" name="itemName" placeholder="Medicine Name" value={formData.itemName} onChange={handleInventoryChange} required className="p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-emerald-500 lg:col-span-2" />
+                                <input type="text" name="batchNumber" placeholder="Batch No (BNO:123)" value={formData.batchNumber} onChange={handleInventoryChange} required className="p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-emerald-500" />
+                                <input type="text" name="expiryDate" placeholder="Exp Date (MM/YY)" value={formData.expiryDate} onChange={handleInventoryChange} required className="p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-emerald-500" />
+                                
+                                <input type="text" name="hsnCode" placeholder="HSN Code" value={formData.hsnCode} onChange={handleInventoryChange} required className="p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-emerald-500" />
+                                <select name="gstPercent" value={formData.gstPercent} onChange={handleInventoryChange} className="p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-emerald-500">
+                                    <option value="0">0% GST</option><option value="5">5% GST</option><option value="12">12% GST</option><option value="18">18% GST</option>
+                                </select>
+                                
+                                <input type="number" step="0.01" name="mrpPerUnit" placeholder="MRP (₹)" value={formData.mrpPerUnit} onChange={handleInventoryChange} required className="p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-emerald-500" />
+                                <input type="number" step="0.01" name="salePricePerUnit" placeholder="Sale Price (₹)" value={formData.salePricePerUnit} onChange={handleInventoryChange} required className="p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-emerald-500" />
+                                
+                                <input type="number" name="stockQuantity" placeholder="Initial Stock Qty" value={formData.stockQuantity} onChange={handleInventoryChange} required className="p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-emerald-500 lg:col-span-2" />
+                                
+                                <button type="submit" className="lg:col-span-2 p-3 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl shadow-sm transition-colors">
+                                    + Add to Database
+                                </button>
+                            </form>
+                        </div>
+
+                        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                            <div className="p-6 border-b border-slate-100 bg-slate-50">
+                                <h3 className="text-lg font-bold text-slate-800">Current Stock Levels</h3>
                             </div>
-
-                            <label style={miniLabel}>Payment Method</label>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
-                                {['Cash', 'UPI', 'Card', 'Split'].map(method => (
-                                    <button 
-                                        key={method}
-                                        onClick={() => setPaymentMethod(method)}
-                                        style={paymentMethod === method ? methodActive : methodInactive}
-                                    >
-                                        {method}
-                                    </button>
-                                ))}
-                            </div>
-
-                            {paymentMethod === 'Cash' && (
-                                <div style={{ marginBottom: '20px', background: `${COLORS.success}15`, border: `1px solid ${COLORS.success}40`, padding: '16px', borderRadius: '12px' }}>
-                                    <label style={{...miniLabel, color: COLORS.success, marginTop: 0}}>Cash Tendered</label>
-                                    <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
-                                        <span style={{ marginRight: '10px', fontSize: '20px', fontWeight: 'bold', color: COLORS.success }}>₹</span>
-                                        <input 
-                                            type="number" 
-                                            placeholder={`Min. ₹${modalGrandTotal}`} 
-                                            style={{ ...inputStyle, marginBottom: 0, fontSize: '16px', fontWeight: 'bold' }} 
-                                            value={tenderAmount} 
-                                            onChange={e => setTenderAmount(e.target.value)} 
-                                        />
-                                    </div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', borderTop: `1px solid ${COLORS.success}40`, paddingTop: '12px' }}>
-                                        <span style={{ color: COLORS.text }}>Change to Return:</span>
-                                        {Number(tenderAmount) - modalGrandTotal >= 0 ? (
-                                            <span style={{ color: COLORS.success, fontSize: '18px', fontWeight: '900' }}>
-                                                ₹{Number(tenderAmount) - modalGrandTotal}
-                                            </span>
-                                        ) : (
-                                            <span style={{ color: COLORS.danger }}>Requires more cash</span>
-                                        )}
-                                    </div>
-                                </div>
-                            )}
-
-                            {paymentMethod === 'Split' && (
-                                <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
-                                    <input placeholder="Cash Amount" type="number" style={inputStyle} onChange={e => setSplitDetails({...splitDetails, cash: e.target.value})} />
-                                    <input placeholder="Online Amount" type="number" style={inputStyle} onChange={e => setSplitDetails({...splitDetails, online: e.target.value})} />
-                                </div>
-                            )}
-
-                            <div style={{ display: 'flex', gap: '12px', marginTop: '20px' }}>
-                                <button onClick={() => setShowPaymentModal(false)} style={{ ...primaryBtn, background: 'transparent', color: COLORS.text, border: `1px solid ${COLORS.border}`, boxShadow: 'none', flex: 1 }}>Cancel</button>
-                                <button onClick={processFinalPayment} style={{ ...primaryBtn, background: COLORS.success, flex: 2, fontSize: '16px' }}>💳 Process & Print</button>
+                            <div className="overflow-x-auto w-full">
+                                <table className="w-full text-left whitespace-nowrap">
+                                    <thead className="bg-slate-50 border-b border-slate-200">
+                                        <tr className="text-slate-500 text-xs uppercase tracking-wider">
+                                            <th className="p-4 font-semibold">Item Name</th>
+                                            <th className="p-4 font-semibold">Batch / Exp</th>
+                                            <th className="p-4 font-semibold">HSN / GST</th>
+                                            <th className="p-4 font-semibold">Pricing (₹)</th>
+                                            <th className="p-4 font-semibold">In Stock</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {inventory.map(item => (
+                                            <tr key={item._id} className={`${item.stockQuantity < 20 ? 'bg-red-50/50' : 'hover:bg-slate-50'} transition-colors`}>
+                                                <td className="p-4 font-bold text-slate-700">{item.itemName}</td>
+                                                <td className="p-4 text-sm text-slate-600">{item.batchNumber} <br/><span className="text-xs text-slate-400">Exp: {item.expiryDate}</span></td>
+                                                <td className="p-4 text-sm text-slate-600">{item.hsnCode} <br/><span className="text-xs text-slate-400">{item.gstPercent}% GST</span></td>
+                                                <td className="p-4 text-sm text-slate-600">MRP: {item.mrpPerUnit} <br/><span className="font-semibold text-emerald-600">Sale: {item.salePricePerUnit}</span></td>
+                                                <td className="p-4">
+                                                    <span className={`font-black text-lg ${item.stockQuantity < 20 ? 'text-red-600' : 'text-emerald-600'}`}>
+                                                        {item.stockQuantity}
+                                                    </span>
+                                                    <span className="text-xs ml-1 text-slate-500">Units</span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>
                 )}
-
             </main>
 
-            {/* ========================================= */}
-                {/* POS PAYMENT MODAL                */}
-                {/* ========================================= */}
-                {/* ========================================= */}
-{/* POS PAYMENT MODAL (CLEAN REACT VERSION)   */}
-{/* ========================================= */}
-{showPaymentModal && selectedBill && (
-    <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(4px)' }}>
-        <div style={{ backgroundColor: COLORS.sidebar, width: '550px', borderRadius: '20px', padding: '30px', boxShadow: COLORS.shadow, color: COLORS.text }}>
-            
-            {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: `1px solid ${COLORS.border}`, paddingBottom: '15px' }}>
-                <h2 style={{ margin: 0 }}>Payment Checkout</h2>
-                <button onClick={() => setShowPaymentModal(false)} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: COLORS.muted }}>✖</button>
-            </div>
+            {/* --- POS CHECKOUT MODAL OVERLAY --- */}
+            {showPaymentModal && selectedBill && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-white w-full max-w-lg rounded-3xl p-6 md:p-8 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+                        
+                        <button onClick={() => setShowPaymentModal(false)} className="absolute top-6 right-6 text-slate-400 hover:text-slate-600 bg-slate-100 p-2 rounded-full">
+                            <X size={20} />
+                        </button>
 
-            {/* Patient Summary */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '25px' }}>
-                <div>
-                    <div style={{ fontWeight: 'bold', fontSize: '18px', color: COLORS.primary }}>{selectedBill.patientName}</div>
-                    <div style={{ color: COLORS.muted, fontSize: '13px' }}>ID: {selectedBill.patientId}</div>
-                </div>
-                
-                {/* Editable Bill Breakdown */}
-                <div style={{ textAlign: 'right', background: COLORS.bg, padding: '10px 15px', borderRadius: '10px', border: `1px solid ${COLORS.border}` }}>
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '10px', marginBottom: '5px' }}>
-                        <span style={{ fontSize: '12px', color: COLORS.muted }}>Consultation Fee:</span>
-                        <input type="number" value={customConsultFee} onChange={(e) => setCustomConsultFee(e.target.value)} style={{ width: '80px', padding: '4px 8px', borderRadius: '6px', border: `1px solid ${COLORS.border}`, fontWeight: 'bold' }} />
-                    </div>
-                    <div style={{ fontSize: '12px', color: COLORS.muted, marginBottom: '8px' }}>Pharmacy: ₹{activeMedsTotal}</div>
-                    <div style={{ fontSize: '24px', fontWeight: '900', color: COLORS.text, borderTop: `1px dashed ${COLORS.border}`, paddingTop: '5px' }}>Total: ₹{activeTotal}</div>
-                </div>
-            </div>
-
-            {/* Payment Method Selector */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '25px' }}>
-                {['Cash', 'UPI', 'Card', 'Split'].map(method => (
-                    <button key={method} onClick={() => { setPaymentMethod(method); setTenderAmount(''); }} style={{ padding: '12px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', border: `2px solid ${paymentMethod === method ? COLORS.primary : COLORS.border}`, background: paymentMethod === method ? `${COLORS.primary}15` : 'transparent', color: paymentMethod === method ? COLORS.primary : COLORS.muted }}>
-                        {method}
-                    </button>
-                ))}
-            </div>
-
-            {/* Dynamic Inputs based on Method */}
-            <div style={{ marginBottom: '25px', background: COLORS.bg, padding: '20px', borderRadius: '15px', border: `1px solid ${COLORS.border}` }}>
-                {paymentMethod === 'Cash' && (
-                    <div>
-                        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '13px', color: COLORS.muted }}>Amount Given by Patient (₹)</label>
-                        <input type="number" placeholder={`Enter amount (e.g. ${activeTotal})`} value={tenderAmount} onChange={e => setTenderAmount(e.target.value)} style={{ width: '100%', padding: '15px', borderRadius: '10px', border: `1px solid ${COLORS.border}`, fontSize: '18px', fontWeight: 'bold', boxSizing: 'border-box' }} autoFocus />
-                    </div>
-                )}
-                {(paymentMethod === 'UPI' || paymentMethod === 'Card') && (
-                    <div style={{ textAlign: 'center', padding: '10px' }}>
-                        <div style={{ fontSize: '40px', marginBottom: '10px' }}>{paymentMethod === 'UPI' ? '📱' : '💳'}</div>
-                        <div style={{ fontWeight: 'bold', color: COLORS.text }}>Collect exactly ₹{activeTotal} via {paymentMethod}</div>
-                    </div>
-                )}
-                {paymentMethod === 'Split' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                            <div style={{ width: '60px', fontWeight: 'bold', color: COLORS.text }}>Cash</div>
-                            <input type="number" placeholder="₹0" value={splitDetails.cash} onChange={e => setSplitDetails({...splitDetails, cash: e.target.value})} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: `1px solid ${COLORS.border}`, fontSize: '16px' }} />
+                        <h2 className="text-2xl font-black text-slate-800 mb-1">Payment Checkout</h2>
+                        <p className="text-emerald-600 font-bold mb-6">{selectedBill.patientName} <span className="text-slate-400 font-normal ml-2">({selectedBill.patientId})</span></p>
+                        
+                        <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 mb-6">
+                            <div className="flex justify-between items-center mb-4">
+                                <span className="text-sm font-semibold text-slate-600">Consultation Fee:</span>
+                                <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-3 py-1">
+                                    <span className="text-slate-400 font-bold">₹</span>
+                                    <input type="number" value={customConsultFee} onChange={(e) => setCustomConsultFee(e.target.value)} className="w-16 text-right font-bold outline-none text-slate-700 bg-transparent" />
+                                </div>
+                            </div>
+                            <div className="flex justify-between items-center mb-4 pb-4 border-b border-slate-200 border-dashed">
+                                <span className="text-sm font-semibold text-slate-600">Pharmacy Charges:</span>
+                                <span className="font-bold text-slate-700">₹{activeMedsTotal}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-lg font-black text-slate-800">GRAND TOTAL:</span>
+                                <span className="text-3xl font-black text-emerald-600">₹{activeTotal}</span>
+                            </div>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                            <div style={{ width: '60px', fontWeight: 'bold', color: COLORS.text }}>Online</div>
-                            <input type="number" placeholder="₹0" value={splitDetails.online} onChange={e => setSplitDetails({...splitDetails, online: e.target.value})} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: `1px solid ${COLORS.border}`, fontSize: '16px' }} />
-                        </div>
-                    </div>
-                )}
-            </div>
 
-            {/* Calculation Summary Box */}
-            {(paymentMethod === 'Cash' || paymentMethod === 'Split') && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '15px', borderRadius: '10px', background: isInsufficient && totalTendered > 0 ? `${COLORS.danger}15` : changeDue > 0 ? `${COLORS.success}15` : COLORS.bg, border: `1px solid ${isInsufficient && totalTendered > 0 ? COLORS.danger : changeDue > 0 ? COLORS.success : COLORS.border}`, marginBottom: '25px' }}>
-                    <div>
-                        <div style={{ color: COLORS.muted, fontSize: '12px', fontWeight: 'bold' }}>Tendered</div>
-                        <div style={{ fontWeight: 'bold', fontSize: '16px', color: COLORS.text }}>₹{totalTendered}</div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                        {isInsufficient && totalTendered > 0 ? (
-                            <>
-                                <div style={{ color: COLORS.danger, fontSize: '12px', fontWeight: 'bold' }}>Shortfall</div>
-                                <div style={{ fontWeight: '900', fontSize: '18px', color: COLORS.danger }}>- ₹{remainingBalance}</div>
-                            </>
-                        ) : (
-                            <>
-                                <div style={{ color: COLORS.success, fontSize: '12px', fontWeight: 'bold' }}>Change to Return</div>
-                                <div style={{ fontWeight: '900', fontSize: '20px', color: COLORS.success }}>₹{changeDue}</div>
-                            </>
+                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Payment Method</label>
+                        <div className="grid grid-cols-4 gap-2 mb-6">
+                            {[
+                                { name: 'Cash', icon: <Banknote size={16}/> },
+                                { name: 'UPI', icon: <Smartphone size={16}/> },
+                                { name: 'Card', icon: <CreditCard size={16}/> },
+                                { name: 'Split', icon: <SplitSquareHorizontal size={16}/> }
+                            ].map(method => (
+                                <button key={method.name} onClick={() => { setPaymentMethod(method.name); setTenderAmount(''); }} 
+                                    className={`flex flex-col items-center justify-center py-3 rounded-xl border-2 font-bold text-xs gap-1 transition-all
+                                    ${paymentMethod === method.name ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-100 bg-white text-slate-400 hover:border-slate-200'}`}>
+                                    {method.icon}
+                                    {method.name}
+                                </button>
+                            ))}
+                        </div>
+
+                        <div className="mb-6">
+                            {paymentMethod === 'Cash' && (
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Amount Given by Patient (₹)</label>
+                                    <div className="relative">
+                                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl font-black text-emerald-500">₹</span>
+                                        <input type="number" placeholder={activeTotal.toString()} value={tenderAmount} onChange={e => setTenderAmount(e.target.value)} className="w-full p-4 pl-10 bg-slate-50 border border-slate-200 rounded-xl text-xl font-black text-slate-800 outline-none focus:border-emerald-500 transition-colors" autoFocus />
+                                    </div>
+                                </div>
+                            )}
+                            {(paymentMethod === 'UPI' || paymentMethod === 'Card') && (
+                                <div className="text-center p-6 bg-slate-50 border border-slate-200 rounded-xl">
+                                    <div className="text-4xl mb-2">{paymentMethod === 'UPI' ? '📱' : '💳'}</div>
+                                    <div className="font-bold text-slate-700">Collect exactly <span className="text-emerald-600 font-black">₹{activeTotal}</span> via {paymentMethod}</div>
+                                </div>
+                            )}
+                            {paymentMethod === 'Split' && (
+                                <div className="flex gap-4">
+                                    <div className="flex-1">
+                                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Cash (₹)</label>
+                                        <input type="number" placeholder="0" value={splitDetails.cash} onChange={e => setSplitDetails({...splitDetails, cash: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 outline-none focus:border-emerald-500" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Online (₹)</label>
+                                        <input type="number" placeholder="0" value={splitDetails.online} onChange={e => setSplitDetails({...splitDetails, online: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 outline-none focus:border-emerald-500" />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {(paymentMethod === 'Cash' || paymentMethod === 'Split') && (
+                            <div className={`flex justify-between p-5 rounded-xl border mb-6 transition-colors
+                                ${isInsufficient && totalTendered > 0 ? 'bg-red-50 border-red-200' : changeDue > 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200'}`}>
+                                <div>
+                                    <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Tendered</div>
+                                    <div className="font-black text-lg text-slate-800">₹{totalTendered}</div>
+                                </div>
+                                <div className="text-right">
+                                    {isInsufficient && totalTendered > 0 ? (
+                                        <>
+                                            <div className="text-xs font-bold text-red-400 uppercase tracking-wider mb-1">Shortfall</div>
+                                            <div className="font-black text-xl text-red-600">- ₹{remainingBalance}</div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div className="text-xs font-bold text-emerald-500 uppercase tracking-wider mb-1">Change to Return</div>
+                                            <div className="font-black text-2xl text-emerald-600">₹{changeDue}</div>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
                         )}
+
+                        <button onClick={submitPayment} disabled={isInsufficient} 
+                            className={`w-full p-4 rounded-xl font-black text-lg transition-all shadow-md active:scale-95
+                            ${isInsufficient ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' : 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-emerald-200'}`}>
+                            {isInsufficient ? 'Insufficient Payment' : `Complete Payment (₹${activeTotal}) ➔`}
+                        </button>
                     </div>
                 </div>
             )}
 
-            {/* Submit Button */}
-            <button 
-                onClick={submitPayment}
-                disabled={isInsufficient} 
-                style={{ width: '100%', padding: '18px', borderRadius: '12px', fontWeight: 'bold', fontSize: '16px', border: 'none', cursor: isInsufficient ? 'not-allowed' : 'pointer', background: isInsufficient ? COLORS.border : COLORS.success, color: isInsufficient ? COLORS.muted : '#FFF' }}
-            >
-                {isInsufficient ? 'Insufficient Payment' : `Complete Payment (₹${activeTotal}) ➔`}
-            </button>
-
-        </div>
-    </div>
-)}
-
+            <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-slate-200 flex justify-around items-center z-50 pb-safe">
+                <button onClick={() => setView('billing')} className={`flex flex-col items-center gap-1 ${view === 'billing' ? 'text-emerald-600' : 'text-slate-400'}`}><Receipt size={20} /><span className="text-[10px] font-bold">Billing</span></button>
+                <button onClick={() => setView('inventory')} className={`flex flex-col items-center gap-1 ${view === 'inventory' ? 'text-emerald-600' : 'text-slate-400'}`}><Package size={20} /><span className="text-[10px] font-bold">Inventory</span></button>
+            </nav>
         </div>
     );
 }
-
-// Paste this at the bottom of the file
-const getStyles = (COLORS) => ({
-    cardStyle: { backgroundColor: COLORS.sidebar, padding: '30px', borderRadius: '20px', border: `1px solid ${COLORS.border}`, boxShadow: COLORS.shadow, transition: 'all 0.3s ease' },
-    tdStyle: { padding: '18px 15px', verticalAlign: 'middle' }
-});

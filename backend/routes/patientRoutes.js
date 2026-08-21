@@ -5,23 +5,31 @@ const verifyTokenAndRole = require('../middleware/auth');
 
 // 1. Search Patient by ID (For Cashier Lookup)
 // FIXED: Now allows the Doctor to search for E.H.R records
-router.get('/search', verifyTokenAndRole(['CASHIER', 'ADMIN', 'DOCTOR']), async (req, res) => {
+router.get('/search', verifyTokenAndRole(['CASHIER', 'PHARMACY', 'ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST']), async (req, res) => {
     try {
-        // We use 'q' for a general query instead of just 'id'
         const query = req.query.q; 
         if (!query) return res.status(400).json({ message: "Search query required" });
 
-        // Search using $or to check multiple fields, and $regex for partial, case-insensitive matches
-        const patients = await Patient.find({
-            $or: [
-                { patientId: { $regex: query, $options: 'i' } },
-                { patientName: { $regex: query, $options: 'i' } },
-                { mobile: { $regex: query, $options: 'i' } }
-            ]
-        }).limit(10); // Limit to top 10 results so the UI doesn't get overwhelmed
+        // 🌟 NEW: Split the search query into separate words (e.g., ["James", "AX042"])
+        const searchTerms = query.split(' ').filter(term => term.trim() !== '');
 
-        res.json(patients); // Note: This now returns an ARRAY of patients, not just one!
+        // 🌟 NEW: Create a rule that says "Every word they typed must match AT LEAST ONE of these fields"
+        const searchConditions = searchTerms.map(term => ({
+            $or: [
+                { patientId: { $regex: term, $options: 'i' } },
+                { patientName: { $regex: term, $options: 'i' } },
+                { mobile: { $regex: term, $options: 'i' } }
+            ]
+        }));
+
+        // Use $and to ensure all words typed in the box are found in the patient's record
+        const patients = await Patient.find({
+            $and: searchConditions
+        }).limit(10); 
+
+        res.json(patients); 
     } catch (err) {
+        console.error("Search API Error:", err);
         res.status(500).json(err);
     }
 });
@@ -31,7 +39,7 @@ router.get('/search', verifyTokenAndRole(['CASHIER', 'ADMIN', 'DOCTOR']), async 
 
 // backend/routes/patientRoutes.js
 
-router.post('/register', verifyTokenAndRole(['CASHIER']), async (req, res) => {
+router.post('/register', verifyTokenAndRole(['CASHIER', 'PHARMACY', 'NURSE', 'RECEPTIONIST', 'ADMIN']), async (req, res) => {
     try {
         const { patientName, age, gender, mobile } = req.body;
 

@@ -4,6 +4,12 @@ import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
+// shadcn UI components
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+
 export default function Login() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -24,43 +30,70 @@ export default function Login() {
             // Save user to Context
             login(response.data);
 
-            // Redirect based on role
-            if (response.data.role === 'DOCTOR') {
+            // 🌟 NEW 3-LAYER ROUTING LOGIC
+            const userRole = response.data.role;
+            
+            if (userRole === 'DOCTOR') {
                 navigate('/doctor');
-            } else if (response.data.role === 'CASHIER') {
+            } else if (userRole === 'NURSE' || userRole === 'RECEPTIONIST') {
+                navigate('/nursing');
+            } else if (userRole === 'CASHIER' || userRole === 'PHARMACY') {
                 navigate('/pharmacy');
+            } else {
+                setError('Unrecognized user role');
             }
+            
         } catch (err) {
             setError(err.response?.data?.message || 'Login failed');
         }
     };
 
     return (
-        <div style={{ maxWidth: '400px', margin: '100px auto', fontFamily: 'sans-serif', textAlign: 'center' }}>
-            <h2>Axon HMS Clinc- Live Portal</h2>
-            {error && <p style={{ color: 'red' }}>{error}</p>}
-            
-            <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                <input 
-                    type="email" 
-                    placeholder="Email (e.g. doctor@hms.com)" 
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    style={{ padding: '10px' }}
-                />
-                <input 
-                    type="password" 
-                    placeholder="Password (e.g. password123)" 
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    style={{ padding: '10px' }}
-                />
-                <button type="submit" style={{ padding: '10px', backgroundColor: '#007bff', color: 'white', border: 'none', cursor: 'pointer' }}>
-                    Login
-                </button>
-            </form>
+        <div className="min-h-screen flex items-center justify-center bg-zinc-50 p-4">
+            <Card className="w-full max-w-md shadow-lg border-0">
+                <CardHeader className="space-y-1 text-center">
+                    <CardTitle className="text-2xl font-bold tracking-tight text-zinc-900">
+                        Axon HMS Clinic - Live Portal
+                    </CardTitle>
+                </CardHeader>
+                
+                <CardContent>
+                    {error && (
+                        <div className="bg-red-50 text-red-500 p-3 rounded-md text-sm mb-4 text-center">
+                            {error}
+                        </div>
+                    )}
+                    
+                    <form onSubmit={handleLogin} className="space-y-4">
+                        <div className="space-y-2 text-left">
+                            <Label htmlFor="email">Email</Label>
+                            <Input 
+                                id="email" 
+                                type="email" 
+                                placeholder="doctor@hms.com" 
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                required 
+                            />
+                        </div>
+                        <div className="space-y-2 text-left">
+                            <Label htmlFor="password">Password</Label>
+                            <Input 
+                                id="password" 
+                                type="password" 
+                                placeholder="••••••••"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                required 
+                            />
+                        </div>
+                        
+                        <Button type="submit" className="w-full mt-2">
+                            Login
+                        </Button>
+                    </form>
+                </CardContent>
+            </Card>
         </div>
     );
 }

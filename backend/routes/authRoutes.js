@@ -4,21 +4,37 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 
-// Secret route to create test users easily
-router.post('/seed', async (req, res) => {
+// --- REAL USER CREATION ROUTE ---
+// ⚠️ Leave this unprotected for now so you can create your first Admin & Nurse.
+// Later, we will add: verifyTokenAndRole(['ADMIN'])
+router.post('/create', async (req, res) => {
+    const { name, email, password, role } = req.body;
     try {
-        const hashedPwd = await bcrypt.hash('password123', 10);
-        await User.create([
-            { name: "Dr. Smith", email: "doctor@hms.com", password: hashedPwd, role: "DOCTOR" },
-            { name: "Cashier Jane", email: "cashier@hms.com", password: hashedPwd, role: "CASHIER" }
-        ]);
-        res.json({ message: "Test users created successfully!" });
+        // 1. Check if user already exists
+        const existingUser = await User.findOne({ email });
+        if (existingUser) return res.status(400).json({ message: "User already exists" });
+
+        // 2. Hash the password
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        // 3. Create the user
+        const newUser = await User.create({
+            name,
+            email,
+            password: hashedPassword,
+            role: role.toUpperCase() // Forces roles like 'NURSE' to be uppercase
+        });
+
+        res.status(201).json({ 
+            message: "User created successfully", 
+            user: { id: newUser._id, name: newUser.name, role: newUser.role } 
+        });
     } catch (err) {
-        res.status(500).json({ error: "Users might already exist" });
+        res.status(500).json({ error: err.message });
     }
 });
 
-// Real Login Route
+// --- REAL LOGIN ROUTE ---
 router.post('/login', async (req, res) => {
     const { email, password } = req.body;
     try {

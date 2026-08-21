@@ -6,11 +6,10 @@ import { useContext } from 'react';
 import Login from './components/Login';
 import DoctorDashboard from './components/DoctorDashboard';
 import PharmacyDashboard from './components/PharmacyDashboard';
-import InventoryDashboard from './components/InventoryDashboard';
-import CashierDashboard from './components/CashierDashboard';
+import NursingDashboard from './components/NursingDashboard'; // 🌟 NEW IMPORT
 
 // --- PROTECTED ROUTE (Handles Session Persistence) ---
-const ProtectedRoute = ({ children, allowedRole }) => {
+const ProtectedRoute = ({ children, allowedRoles }) => {
     const { user, loading } = useContext(AuthContext);
     
     // While checking localStorage, show nothing or a spinner
@@ -19,13 +18,16 @@ const ProtectedRoute = ({ children, allowedRole }) => {
     // If no user found after loading, go to login
     if (!user) return <Navigate to="/" />;
     
+    // Check if the user's role is included in the allowedRoles array
+    const hasAccess = allowedRoles.includes(user.role);
+
     // If role doesn't match
-    if (user.role !== allowedRole) {
+    if (!hasAccess) {
         return (
             <div style={{ padding: '50px', textAlign: 'center', fontFamily: 'sans-serif' }}>
-                if (user.role !== allowedRole) return <h2>Access Denied: Required {allowedRole}</h2>;
+                <h2>Access Denied</h2>
                 <p>You do not have permission to view this department.</p>
-                <button onClick={() => window.location.href = '/'} style={{ padding: '10px 20px', cursor: 'pointer' }}>Return to Login</button>
+                <button onClick={() => window.location.href = '/'} style={{ padding: '10px 20px', cursor: 'pointer', marginTop: '10px' }}>Return to Login</button>
             </div>
         );
     }
@@ -35,10 +37,8 @@ const ProtectedRoute = ({ children, allowedRole }) => {
 
 export default function App() {
     return (
-        // 1. Router must wrap EVERYTHING
         <Router>
             <AuthProvider>
-                {/* 2. Main Wrapper: Forces 100% True Width */}
                 <div style={{ 
                     width: '100vw', 
                     minHeight: '100vh', 
@@ -52,30 +52,24 @@ export default function App() {
                         {/* Public Route */}
                         <Route path="/" element={<Login />} />
                         
-                        {/* Doctor's Workspace */}
+                        {/* 1. Nursing / Reception Workspace */}
+                        <Route path="/nursing" element={
+                            <ProtectedRoute allowedRoles={['NURSE', 'RECEPTIONIST']}>
+                                <NursingDashboard />
+                            </ProtectedRoute>
+                        } />
+
+                        {/* 2. Doctor's Workspace */}
                         <Route path="/doctor" element={
-                            <ProtectedRoute allowedRole="DOCTOR">
+                            <ProtectedRoute allowedRoles={['DOCTOR']}>
                                 <DoctorDashboard />
                             </ProtectedRoute>
                         } />
                         
-                        {/* Pharmacy Section */}
+                        {/* 3. Pharmacy & Billing Workspace (Merged) */}
                         <Route path="/pharmacy" element={
-                            <ProtectedRoute allowedRole="CASHIER">
+                            <ProtectedRoute allowedRoles={['CASHIER', 'PHARMACY']}>
                                 <PharmacyDashboard />
-                            </ProtectedRoute>
-                        } />
-
-                        <Route path="/pharmacy" element={
-                            <ProtectedRoute allowedRole="CASHIER">
-                                <CashierDashboard /> 
-                            </ProtectedRoute>
-                        } />
-
-                        {/* Inventory Section */}
-                        <Route path="/inventory" element={
-                            <ProtectedRoute allowedRole="CASHIER">
-                                <InventoryDashboard />
                             </ProtectedRoute>
                         } />
 
